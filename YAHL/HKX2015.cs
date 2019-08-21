@@ -141,6 +141,9 @@ namespace YAHL
                         xw.WriteAttributeString("id", $"{i}");
                         xw.WriteAttributeString("name", $"{t.Name}");
 
+                        if (t.ParentTypeIndex > 0)
+                            xw.WriteAttributeString("parent", $"{t.ParentTypeIndex}");
+
                         if ((t.Flags & HKTagFlag.Pointer) != 0)
                             xw.WriteAttributeString("pointer", $"{t.PointerTypeIndex}");
 
