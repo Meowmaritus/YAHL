@@ -6,5 +6,10 @@ Yet Another Havok Lib
 * Does not support parsing the DATA section using the TYPE and INDX sections yet.
 * Sucks.
 
-# CLONING:
-* Use `git clone --recursive https://github.com/Meowmaritus/YAHL.git` to ensure submodule SoulsFormats is cloned as well.
+# CREDIT:
+* BinaryReaderEx and BinaryWriterEx from https://github.com/JKAnderson/SoulsFormats
+* Heavily referenced https://github.com/blueskythlikesclouds/TagTools for the 2015 HKX format.
+
+# WHY DID YOU EVEN DO THIS YOU IDIOT:
+* Learning experience
+* Hate Python
