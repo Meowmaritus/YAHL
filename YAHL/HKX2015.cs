@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Xml;
 
 namespace YAHL
 {
@@ -38,6 +39,7 @@ namespace YAHL
 
         public class HKInterface
         {
+            public uint TypeIndex;
             public HKType Type;
             public uint Value;
 
@@ -52,6 +54,7 @@ namespace YAHL
             public string Name;
             public uint Flags;
             public uint ByteOffset;
+            public uint TypeIndex;
             public HKType Type;
 
             public override string ToString()
@@ -62,6 +65,7 @@ namespace YAHL
 
         public class HKPatch
         {
+            public uint TypeIndex;
             public HKType Type;
             public List<uint> Offsets = new List<uint>();
 
@@ -73,6 +77,7 @@ namespace YAHL
 
         public class HKItem
         {
+            public uint TypeIndex;
             public HKType Type;
             public bool IsPointer;
             public uint OffsetPastDataStart;
@@ -90,6 +95,7 @@ namespace YAHL
             public List<string> TypeStrings = new List<string>();
             public List<string> FieldStrings = new List<string>();
             public List<HKTypeTemplate> Templates = new List<HKTypeTemplate>();
+            public uint ParentTypeIndex;
             public HKType Parent;
             public HKTagFlag Flags;
 
@@ -97,6 +103,7 @@ namespace YAHL
 
             //Shit Flags controls:
             public uint SubTypeFlags;
+            public uint PointerTypeIndex;
             public HKType Pointer;
             public uint Version;
             public uint ByteSize;
@@ -110,6 +117,86 @@ namespace YAHL
             {
                 return $"HKType ['{Name}', Parent={(Parent?.ToString() ?? "<Null>")}]";
             }
+        }
+
+        public void DumpTypesToXml(string xmlFile)
+        {
+            XmlWriterSettings xws = new XmlWriterSettings();
+            xws.Indent = true;
+            XmlWriter xw = XmlWriter.Create(xmlFile, xws);
+            xw.WriteStartElement("types");
+            {
+                for (int i = 1; i < Types.Count; i++)
+                {
+                    var t = Types[i];
+                    xw.WriteStartElement("type");
+                    {
+                        xw.WriteAttributeString("alignment", $"{t.Alignment}");
+                        xw.WriteAttributeString("byteSize", $"{t.ByteSize}");
+                        xw.WriteAttributeString("flags", $"{(uint)t.Flags}");
+
+                        if (t.Hash != 0)
+                            xw.WriteAttributeString("hash", $"{t.Hash}");
+
+                        xw.WriteAttributeString("id", $"{i}");
+                        xw.WriteAttributeString("name", $"{t.Name}");
+
+                        if ((t.Flags & HKTagFlag.Pointer) != 0)
+                            xw.WriteAttributeString("pointer", $"{t.PointerTypeIndex}");
+
+                        if ((t.Flags & HKTagFlag.SubType) != 0)
+                            xw.WriteAttributeString("subTypeFlags", $"{t.SubTypeFlags}");
+
+                        if ((t.Flags & HKTagFlag.Version) != 0)
+                            xw.WriteAttributeString("version", $"{t.Version}");
+
+
+                        if (t.Templates.Count > 0)
+                        {
+                            foreach (var temp in t.Templates)
+                            {
+                                xw.WriteStartElement("template");
+                                {
+                                    xw.WriteAttributeString("name", $"{temp.Name}");
+                                    xw.WriteAttributeString("value", $"{temp.Value}");
+                                }
+                                xw.WriteEndElement();
+                            }
+                        }
+
+                        if ((t.Flags & HKTagFlag.Members) != 0)
+                        {
+                            foreach (var m in t.Members)
+                            {
+                                xw.WriteStartElement("member");
+                                {
+                                    xw.WriteAttributeString("flags", $"{m.Flags}");
+                                    xw.WriteAttributeString("name", $"{m.Name}");
+                                    xw.WriteAttributeString("offset", $"{m.ByteOffset}");
+                                    xw.WriteAttributeString("type", $"{m.TypeIndex}");
+                                }
+                                xw.WriteEndElement();
+                            }
+                        }
+
+                        if ((t.Flags & HKTagFlag.Interfaces) != 0)
+                        {
+                            foreach (var inter in t.Interfaces)
+                            {
+                                xw.WriteStartElement("interface");
+                                {
+                                    xw.WriteAttributeString("flags", $"{inter.Value}");
+                                    xw.WriteAttributeString("type", $"{inter.TypeIndex}");
+                                }
+                                xw.WriteEndElement();
+                            }
+                        }
+                    }
+                    xw.WriteEndElement();
+                }
+            }
+            xw.WriteEndElement();
+            xw.Close();
         }
 
         public void Read(string fileName)
@@ -201,7 +288,8 @@ namespace YAHL
                     continue;
 
                 var t = Types[(int)typeIndex];
-                t.Parent = Types[(int)br.ReadHKPackedInt()];
+                t.ParentTypeIndex = br.ReadHKPackedInt();
+                t.Parent = Types[(int)t.ParentTypeIndex];
                 t.Flags = (HKTagFlag)br.ReadHKPackedInt();
 
                 if ((t.Flags & HKTagFlag.SubType) != 0)
@@ -211,7 +299,8 @@ namespace YAHL
 
                 if (((t.Flags & HKTagFlag.Pointer) != 0) && ((t.SubTypeFlags & 0xF) >= 6))
                 {
-                    t.Pointer = Types[(int)br.ReadHKPackedInt()];
+                    t.PointerTypeIndex = br.ReadHKPackedInt();
+                    t.Pointer = Types[(int)t.PointerTypeIndex];
                 }
 
                 if ((t.Flags & HKTagFlag.Version) != 0)
@@ -239,7 +328,8 @@ namespace YAHL
                         member.Name = fieldStrings[(int)br.ReadHKPackedInt()];
                         member.Flags = br.ReadHKPackedInt();
                         member.ByteOffset = br.ReadHKPackedInt();
-                        member.Type = Types[(int)br.ReadHKPackedInt()];
+                        member.TypeIndex = br.ReadHKPackedInt();
+                        member.Type = Types[(int)member.TypeIndex];
                         t.Members.Add(member);
                     }
                 }
@@ -250,7 +340,8 @@ namespace YAHL
                     for (int i = 0; i < interfaceCount; i++)
                     {
                         var inter = new HKInterface();
-                        inter.Type = Types[(int)br.ReadHKPackedInt()];
+                        inter.TypeIndex = br.ReadHKPackedInt();
+                        inter.Type = Types[(int)inter.TypeIndex];
                         inter.Value = br.ReadHKPackedInt();
                         t.Interfaces.Add(inter);
                     }
@@ -293,7 +384,8 @@ namespace YAHL
             {
                 var item = new HKItem();
                 var flag = br.ReadUInt32();
-                item.Type = Types[(int)(flag & 0xFFFFFF)];
+                item.TypeIndex = (flag & 0xFFFFFF);
+                item.Type = Types[(int)item.TypeIndex];
                 item.IsPointer = ((flag & 0x10000000) != 0);
                 item.OffsetPastDataStart = br.ReadUInt32();
                 item.Count = br.ReadUInt32();
@@ -305,7 +397,8 @@ namespace YAHL
             while (br.Position < br.Length)
             {
                 var patch = new HKPatch();
-                patch.Type = Types[br.ReadInt32()];
+                patch.TypeIndex = br.ReadUInt32();
+                patch.Type = Types[(int)patch.TypeIndex];
                 int offsetCount = br.ReadInt32();
                 for (int j = 0; j < offsetCount; j++)
                 {
